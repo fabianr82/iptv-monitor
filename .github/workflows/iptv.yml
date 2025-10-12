@@ -1,0 +1,38 @@
+name: IPTV Report
+
+on:
+  schedule:
+    # Bogotá (UTC-5): 08:00, 14:31, 20:00 → 13:00, 19:00, 01:00 UTC
+    - cron: "0 13,19,1 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install requests
+
+      - name: Run script
+        # Si decides usar secrets, descomenta y ajústalo en tu script.
+        # env:
+        #   APIKEY1: ${{ secrets.APIKEY1 }}
+        #   APIKEY2: ${{ secrets.APIKEY2 }}
+        #   APIKEY3: ${{ secrets.APIKEY3 }}
+        run: python verificador.py
+
+      - name: Save summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resumen-canales
+          path: Canales_Caidos.txt
+          if-no-files-found: ignore
