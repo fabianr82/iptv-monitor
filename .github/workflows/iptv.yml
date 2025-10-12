@@ -2,8 +2,8 @@ name: IPTV Report
 
 on:
   schedule:
-    # Bogotá (UTC-5): 08:00, 14:31, 20:00 → 13:00, 19:00, 01:00 UTC
-    - cron: "0 13,19,1 * * *"
+    - cron: "10 13 * * *"     # 08:10 Bogotá
+    - cron: "30 20,1 * * *"   # 15:30 y 20:30 Bogotá
   workflow_dispatch: {}
 
 jobs:
