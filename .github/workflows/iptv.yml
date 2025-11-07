@@ -1,14 +1,15 @@
-name: IPTV Report
+name: IPTV Report (Self-Hosted)
 
 on:
   schedule:
     - cron: "10 13 * * *"     # 08:10 Bogotá
-    - cron: "30 20,1 * * *"   # 15:30 y 20:30 Bogotá
+    - cron: "30 20 * * *"     # 15:30 Bogotá
+    - cron: "30 1 * * *"      # 20:30 Bogotá
   workflow_dispatch: {}
 
 jobs:
   run:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -18,21 +19,17 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install dependencies
         run: pip install requests
 
-      - name: Run script
-        # Si decides usar secrets, descomenta y ajústalo en tu script.
-        # env:
-        #   APIKEY1: ${{ secrets.APIKEY1 }}
-        #   APIKEY2: ${{ secrets.APIKEY2 }}
-        #   APIKEY3: ${{ secrets.APIKEY3 }}
+      - name: Ejecutar verificador
+        working-directory: /home/public_html/public/aaprueba
         run: python verificador.py
 
-      - name: Save summary artifact
+      - name: Guardar resumen
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: resumen-canales
-          path: Canales_Caidos.txt
+          path: /home/public_html/public/aaprueba/Canales_Caidos.txt
           if-no-files-found: ignore
