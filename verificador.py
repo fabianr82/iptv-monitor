@@ -11,31 +11,31 @@ except Exception:
     pass
 
 # ====== CONFIGURACIÓN ======
-# Destinatarios con API key propia
 destinatarios = [
-    {"telefono": "+573007975452", "apikey": "8887083"},     # ✅ activo
+    {"telefono": "+573007975452", "apikey": "8887083"},
     {"telefono": "+573208095251", "apikey": "7893471"},
     {"telefono": "+573174374244", "apikey": "2890771"},
 ]
 
-# Fuente de la M3U (URL pública en Hostinger)
+# Fuente de la lista M3U desde hosting o GitHub
 ruta_archivo = "https://freshcampo.com.co/public/aaprueba/Lista25.m3u"
 
-# Dónde guardar el TXT de resumen (local en tu PC/servidor)
+# Archivo local donde se guarda el resumen
 ruta_resumen = r"C:\Users\Fabian\Desktop\IPTV\Lista Canales\Canales_Caidos.txt"
 
-# User-Agent "tipo reproductor" para probar streams
-HEADERS_STREAM = {"User-Agent": "VLC/3.0.11 LibVLC/3.0.11"}
+# Cabeceras para probar streams IPTV (más compatibles)
+HEADERS_STREAM = {
+    "User-Agent": "VLC/3.0.18 LibVLC/3.0.18",
+    "Accept": "*/*",
+    "Connection": "keep-alive",
+    "Range": "bytes=0-1024",
+}
 
 
-# ====== UTILIDADES ======
+# ====== FUNCIONES ======
 def cargar_m3u(ruta: str) -> List[Tuple[str, str]]:
-    """
-    Carga una lista M3U desde URL (http/https) o desde ruta local.
-    Devuelve lista de (nombre, url).
-    """
+    """Carga lista M3U desde URL o archivo local."""
     if ruta.lower().startswith(("http://", "https://")):
-        # Comprobación rápida de disponibilidad
         resp_head = requests.head(ruta, timeout=15, allow_redirects=True)
         resp_head.raise_for_status()
         resp = requests.get(ruta, timeout=30)
@@ -51,32 +51,52 @@ def cargar_m3u(ruta: str) -> List[Tuple[str, str]]:
             nombre = lineas[i].strip().split(",")[-1]
             if i + 1 < len(lineas):
                 url = lineas[i + 1].strip()
-                if url:  # evitar líneas vacías
+                if url:
                     canales.append((nombre, url))
     return canales
 
 
-def verificar_canal(nombre: str, url: str, timeout: int = 3) -> bool:
+def verificar_canal(nombre: str, url: str, timeout: int = 6) -> bool:
+    """
+    Verifica si un canal IPTV está activo.
+    Soporta URLs tipo:
+      - /play/a00z
+      - /user/pass/streamid.ts
+    """
     try:
-        r = requests.get(url, headers=HEADERS_STREAM, timeout=timeout, stream=False)
-        return r.status_code == 200
+        # Primer intento: HEAD rápido
+        r = requests.head(url, headers=HEADERS_STREAM, timeout=timeout, allow_redirects=True)
+        if 200 <= r.status_code < 400:
+            return True
+
+        # Segundo intento: GET parcial (por si el servidor no soporta HEAD)
+        r = requests.get(url, headers=HEADERS_STREAM, timeout=timeout, stream=True)
+        if r.status_code == 200:
+            return True
+
+        print(f"   ⚠ {nombre} respondió código {r.status_code}")
+        return False
+
+    except requests.exceptions.Timeout:
+        print(f"   ⏱ Tiempo agotado verificando {nombre}")
+        return False
+    except requests.exceptions.ConnectionError:
+        print(f"   ❌ Sin conexión al servidor ({url})")
+        return False
     except requests.exceptions.RequestException as e:
         print(f"   ⚠ Error verificando {nombre}: {e}")
         return False
 
 
 def enviar_whatsapp(mensaje: str) -> None:
-    """
-    Envía el mismo mensaje a todos los destinatarios.
-    Muestra diagnóstico si CallMeBot devuelve error (p.ej. 203 o APIKey inválida).
-    """
+    """Envía el mismo mensaje a todos los destinatarios vía CallMeBot."""
     mensaje_encoded = requests.utils.quote(mensaje)
     for d in destinatarios:
         telefono = d["telefono"]
         apikey = d["apikey"]
         url = (
-            "https://api.callmebot.com/whatsapp.php"
-            f"?phone={telefono}&text={mensaje_encoded}&apikey={apikey}"
+            f"https://api.callmebot.com/whatsapp.php?phone={telefono}"
+            f"&text={mensaje_encoded}&apikey={apikey}"
         )
         try:
             r = requests.get(url, timeout=20)
@@ -84,21 +104,24 @@ def enviar_whatsapp(mensaje: str) -> None:
                 print(f"📲 Mensaje enviado a {telefono}.")
             else:
                 print(f"⚠ Error enviando a {telefono}: {r.status_code} - {r.text}")
-            time.sleep(2)  # pequeña pausa para evitar rate limit
+            time.sleep(2)
         except Exception as e:
             print(f"⚠ Excepción al enviar a {telefono}: {e}")
 
 
-# ====== LÓGICA PRINCIPAL ======
 def monitorear_lista(ruta: str) -> None:
     print("🔎 Verificando canales...\n")
 
-    # 🔔 Alerta si la URL no responde (HEAD no OK) y salir
-    if ruta.lower().startswith(("http://", "https://")) and not requests.head(
-        ruta, timeout=15, allow_redirects=True
-    ).ok:
-        enviar_whatsapp(f"⚠️ No pude acceder a la lista M3U: {ruta}")
-        return
+    # Verificar que la lista remota esté disponible
+    if ruta.lower().startswith(("http://", "https://")):
+        try:
+            resp = requests.head(ruta, timeout=15, allow_redirects=True)
+            if not resp.ok:
+                enviar_whatsapp(f"⚠️ No se pudo acceder a la lista M3U: {ruta}")
+                return
+        except Exception as e:
+            enviar_whatsapp(f"⚠️ Error accediendo a la lista M3U: {e}")
+            return
 
     try:
         canales = cargar_m3u(ruta)
@@ -127,17 +150,16 @@ def monitorear_lista(ruta: str) -> None:
     print(f"✔ Canales activos: {activos}")
     print(f"❌ Canales caídos: {caidos}")
 
+    # Crear resumen TXT
     mensaje_whatsapp = f"📺 Reporte IPTV\n✅ Activos: {activos}\n❌ Caídos: {caidos}"
-
-    if lista_caidos:
-        mensaje_whatsapp += "\n📄 Lista Caídos:\n"
-        with open(ruta_resumen, "w", encoding="utf-8") as f:
+    with open(ruta_resumen, "w", encoding="utf-8") as f:
+        if lista_caidos:
             f.write("🛑 RESUMEN DE CANALES CAÍDOS\n\n")
+            mensaje_whatsapp += "\n📄 Lista Caídos:\n"
             for nombre, url in lista_caidos:
                 f.write(f"❌ {nombre} → {url}\n")
-                mensaje_whatsapp += f"- {nombre}: {url}\n"
-    else:
-        with open(ruta_resumen, "w", encoding="utf-8") as f:
+                mensaje_whatsapp += f"- {nombre}\n"
+        else:
             f.write("✅ Todos los canales están activos\n")
 
     print(f"\n📄 Resumen también guardado en: {ruta_resumen}")
