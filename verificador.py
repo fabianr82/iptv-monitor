@@ -1,4 +1,3 @@
-# check_iptv.py
 import requests
 import sys
 import time
@@ -19,8 +18,9 @@ DEFAULT_DESTINATARIOS = [
     {"telefono": "+573007975452", "apikey": "1005921"}
 ]
 
-# URL / Archivo M3U (se puede pasar vía ENV)
-M3U_RUTA = os.environ.get("M3U_URL", "https://freshcampo.com.co/public/aaprueba/Lista25.m3u")
+# CRÍTICO: CAMBIO DE RUTA
+# La ruta ahora es local (M3U_FILE = "Lista25.m3u") para usar el archivo subido al repositorio.
+M3U_RUTA = os.environ.get("M3U_URL", "Lista25.m3u") 
 
 # Archivo de resumen
 RUTA_RESUMEN = os.environ.get("RUTA_RESUMEN", "Canales_Caidos.txt")
@@ -57,13 +57,21 @@ def cargar_m3u(ruta: str) -> List[Tuple[str, str]]:
     """Carga la lista M3U desde web o archivo local."""
     print(f"🔁 Cargando M3U desde: {ruta}")
 
+    # Si la ruta comienza con http, intenta descargar (Comportamiento heredado)
     if ruta.lower().startswith(("http://", "https://")):
         resp = requests.get(ruta, timeout=30)
         resp.raise_for_status()
+        # Nota: La codificación latin-1 es común en M3U, pero UTF-8 es preferible si es posible.
         lineas = resp.content.decode("latin-1", errors="ignore").splitlines()
     else:
-        with open(ruta, "r", encoding="latin-1", errors="ignore") as f:
-            lineas = f.readlines()
+        # AQUÍ SE LEE EL ARCHIVO LOCAL DEL REPOSITORIO
+        try:
+            with open(ruta, "r", encoding="latin-1", errors="ignore") as f:
+                lineas = f.readlines()
+        except FileNotFoundError:
+            print(f"❌ Error: Archivo local M3U no encontrado en la ruta: {ruta}")
+            raise # Lanza el error para que el job falle
+            
 
     canales = []
     for i in range(len(lineas)):
@@ -71,7 +79,7 @@ def cargar_m3u(ruta: str) -> List[Tuple[str, str]]:
             nombre = lineas[i].strip().split(",")[-1]
             if i + 1 < len(lineas):
                 url = lineas[i + 1].strip()
-                if url:
+                if url and url.startswith(("http://", "https://")): # Asegurar que es una URL válida
                     canales.append((nombre, url))
 
     print(f"🔢 Canales encontrados: {len(canales)}")
@@ -80,33 +88,48 @@ def cargar_m3u(ruta: str) -> List[Tuple[str, str]]:
 
 def verificar_canal(nombre: str, url: str, timeout: int = 6) -> bool:
     """Verifica si un canal responde."""
+    # Reducción de la prueba de conexión para ahorrar tiempo y recursos
+    
+    # 1. Intento con HEAD (más rápido, ideal para CDN)
     try:
         r = requests.head(url, headers=HEADERS_STREAM, timeout=timeout, allow_redirects=True)
         if 200 <= r.status_code < 400:
-            print(f"   → HEAD OK ({r.status_code})")
+            print(f"   → HEAD OK ({r.status_code})")
             return True
+    except requests.exceptions.Timeout:
+        print("   ⏱ Timeout (HEAD)")
+    except requests.exceptions.ConnectionError:
+        print("   ❌ ConnectionError (HEAD)")
+    except Exception:
+        pass # Ignorar errores en HEAD y probar GET
 
+    # 2. Intento con GET parcial (para verificar contenido de stream)
+    try:
+        # stream=True y limitando la lectura a un chunk_size=512
         r = requests.get(url, headers=HEADERS_STREAM, timeout=timeout, stream=True)
-        if r.status_code == 200:
+        
+        if 200 <= r.status_code < 400:
             try:
+                # Intenta leer un chunk muy pequeño para verificar que el stream esté activo
                 chunk = next(r.iter_content(chunk_size=512), b"")
                 if chunk:
-                    print("   → GET parcial OK (recibiendo datos)")
-                return True
+                    print(f"   → GET parcial OK ({r.status_code}, recibiendo datos)")
+                    return True
             except Exception:
-                return True
-
-        print(f"   ⚠ Código inesperado: {r.status_code}")
+                 # Si falla al leer el chunk, pero el estado HTTP es 200, aún lo marcamos como activo
+                 return True 
+        
+        print(f"   ⚠ Código inesperado: {r.status_code}")
         return False
 
     except requests.exceptions.Timeout:
-        print("   ⏱ Timeout")
+        print("   ⏱ Timeout (GET)")
         return False
     except requests.exceptions.ConnectionError:
-        print("   ❌ ConnectionError")
+        print("   ❌ ConnectionError (GET)")
         return False
     except Exception as e:
-        print(f"   ⚠ Error: {e}")
+        print(f"   ⚠ Error: {e}")
         return False
 
 
@@ -151,7 +174,7 @@ def monitorear_lista(ruta: str) -> None:
     try:
         canales = cargar_m3u(ruta)
     except Exception as e:
-        msg = f"⚠ No pude cargar la M3U ({e})."
+        msg = f"⚠ No pude cargar la M3U ({e}). Asegúrese de que '{ruta}' exista."
         print(msg)
         enviar_whatsapp(msg, destinatarios)
         return
@@ -172,7 +195,7 @@ def monitorear_lista(ruta: str) -> None:
     # Resumen
     print("\n📊 Resultados")
     print(f"✔ Activos: {activos}")
-    print(f"❌ Caídos:  {len(caidos)}")
+    print(f"❌ Caídos:  {len(caidos)}")
 
     # Crear archivos
     with open("output.txt", "w", encoding="utf-8") as f:
