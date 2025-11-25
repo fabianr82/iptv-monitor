@@ -1,8 +1,8 @@
-name: IPTV Report (Self-Hosted)
+name: IPTV Report (GitHub-Hosted)
 
 on:
   schedule:
-    # Programación de las tareas automáticas
+    # Programación de las tareas automáticas (Horas UTC)
     - cron: "10 13 * * *"     # 08:10 Bogotá / 13:10 UTC
     - cron: "30 20 * * *"     # 15:30 Bogotá / 20:30 UTC
     - cron: "30 1 * * *"      # 20:30 Bogotá (del día anterior) / 01:30 UTC
@@ -10,45 +10,32 @@ on:
 
 jobs:
   run:
-    # CRÍTICO: Especifica que este job debe usar tu runner autoalojado
-    # Asegúrate de que las etiquetas coincidan con las que configuraste en tu runner IPTVHostinger
-    runs-on: [self-hosted, hostinger, linux] 
+    # CRÍTICO: Usar el runner de GitHub (ubuntu-latest) para evitar el error de "Out of memory"
+    runs-on: ubuntu-latest 
     
     steps:
       - name: Checkout repository
-        # Descarga el código del repositorio en la carpeta de trabajo del runner
+        # Descarga el código del repositorio (incluye verificador.py y Lista25.m3u)
         uses: actions/checkout@v4
       
       - name: Setup Python
-        # Configura el entorno Python 3.11 (debe estar instalado en tu Hostinger)
+        # Configura el entorno Python 3.11 en el runner de GitHub
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       
       - name: Install dependencies
-        # Instala la librería requests para hacer peticiones HTTP
+        # Instala la librería requests (necesaria para el script)
         run: pip install requests
         
       - name: Ejecutar verificador
-        # El comando se ejecuta desde la raíz del repositorio clonado
-        # Generará 'Canales_Caidos.txt' en esa misma ubicación
-        run: python check_iptv.py
+        # CRÍTICO: Ejecuta el script verificador.py (que lee Lista25.m3u localmente)
+        # Generará 'Canales_Caidos.txt' en la raíz del repositorio
+        run: python verificador.py
         
-      # PASO DE DESPLIEGUE A HOSTINGER
-      - name: Despliegue de Resumen a Public_html
-        # Este paso copia el archivo generado a la ubicación web final en tu Hostinger
-        run: |
-          # 🚨 RUTA CORREGIDA: Usa tu usuario SSH (u660358073) y la ruta exacta de Hostinger
-          RUTA_FINAL="/home/u660358073/public_html/public/aaprueba/"
-          
-          echo "Copiando Canales_Caidos.txt a: ${RUTA_FINAL}"
-          cp Canales_Caidos.txt "${RUTA_FINAL}"
-          
-          # 💡 Consejo: Para verificar que el archivo está en la ruta, puedes agregar:
-          # ls -la "${RUTA_FINAL}"
-          
-      - name: Subir resumen como artefacto de GitHub (Opcional)
+      - name: Subir resumen como artefacto de GitHub
         # Sube el archivo de resultado a GitHub para que puedas descargarlo desde la interfaz
+        # Esta es la única forma de obtener el resultado, ya que eliminamos el despliegue a Hostinger.
         if: always()
         uses: actions/upload-artifact@v4
         with:
