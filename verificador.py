@@ -215,8 +215,10 @@ def monitorear_lista(ruta: str) -> None:
 
     # ENVÍO DE WHATSAPP MEJORADO (Ajuste solicitado)
     if caidos:
-        # Construye la lista detallada de canales caídos (solo nombres)
-        detalle_caidos = "\n" + "\n".join([f"❌ {n}" for n, u in caidos])
+        # Construye la lista detallada de canales caídos incluyendo NOMBRE y URL
+        # Se usa un formato multilínea simple para WhatsApp.
+        detalle_caidos = "\n" + "\n".join([f"❌ {n} -> {u}" for n, u in caidos])
+        
         mensaje = (
             f"🛑 Reporte IPTV (FALLOS)\n"
             f"✔ Activos: {activos}\n"
