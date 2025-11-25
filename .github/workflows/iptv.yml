@@ -2,34 +2,56 @@ name: IPTV Report (Self-Hosted)
 
 on:
   schedule:
-    - cron: "10 13 * * *"     # 08:10 Bogotá
-    - cron: "30 20 * * *"     # 15:30 Bogotá
-    - cron: "30 1 * * *"      # 20:30 Bogotá (del día anterior en UTC)
-  workflow_dispatch: {}
+    # Programación de las tareas automáticas
+    - cron: "10 13 * * *"     # 08:10 Bogotá / 13:10 UTC
+    - cron: "30 20 * * *"     # 15:30 Bogotá / 20:30 UTC
+    - cron: "30 1 * * *"      # 20:30 Bogotá (del día anterior) / 01:30 UTC
+  workflow_dispatch: {} # Permite ejecutar el workflow manualmente desde GitHub
 
 jobs:
   run:
-    runs-on: ubuntu-latest
+    # CRÍTICO: Especifica que este job debe usar tu runner autoalojado
+    # Asegúrate de que las etiquetas coincidan con las que configuraste en tu runner IPTVHostinger
+    runs-on: [self-hosted, hostinger, linux] 
+    
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
+        # Descarga el código del repositorio en la carpeta de trabajo del runner
         uses: actions/checkout@v4
-
+      
       - name: Setup Python
+        # Configura el entorno Python 3.11 (debe estar instalado en tu Hostinger)
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+      
       - name: Install dependencies
+        # Instala la librería requests para hacer peticiones HTTP
         run: pip install requests
-
+        
       - name: Ejecutar verificador
-        working-directory: /home/public_html/public/aaprueba
+        # El comando se ejecuta desde la raíz del repositorio clonado
+        # Generará 'Canales_Caidos.txt' en esa misma ubicación
         run: python check_iptv.py
-
-      - name: Guardar resumen
+        
+      # PASO DE DESPLIEGUE A HOSTINGER
+      - name: Despliegue de Resumen a Public_html
+        # Este paso copia el archivo generado a la ubicación web final en tu Hostinger
+        run: |
+          # 🚨 RUTA CORREGIDA: Usa tu usuario SSH (u660358073) y la ruta exacta de Hostinger
+          RUTA_FINAL="/home/u660358073/public_html/public/aaprueba/"
+          
+          echo "Copiando Canales_Caidos.txt a: ${RUTA_FINAL}"
+          cp Canales_Caidos.txt "${RUTA_FINAL}"
+          
+          # 💡 Consejo: Para verificar que el archivo está en la ruta, puedes agregar:
+          # ls -la "${RUTA_FINAL}"
+          
+      - name: Subir resumen como artefacto de GitHub (Opcional)
+        # Sube el archivo de resultado a GitHub para que puedas descargarlo desde la interfaz
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: resumen-canales
-          path: /home/public_html/public/aaprueba/Canales_Caidos.txt
+          path: Canales_Caidos.txt # Ruta relativa dentro del repositorio
           if-no-files-found: ignore
