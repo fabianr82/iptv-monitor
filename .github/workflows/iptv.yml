@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: "10 13 * * *"     # 08:10 Bogotá
     - cron: "30 20 * * *"     # 15:30 Bogotá
-    - cron: "30 1 * * *"      # 20:30 Bogotá
+    - cron: "30 1 * * *"      # 20:30 Bogotá (del día anterior en UTC)
   workflow_dispatch: {}
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
 
       - name: Ejecutar verificador
         working-directory: /home/public_html/public/aaprueba
-        run: python verificador.py
+        run: python check_iptv.py
 
       - name: Guardar resumen
         if: always()
