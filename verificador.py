@@ -186,6 +186,8 @@ def monitorear_lista(ruta: str) -> None:
     for idx, (nombre, url) in enumerate(canales, start=1):
         print(f"[{idx}/{total}] {nombre}")
         if verificar_canal(nombre, url):
+            # Agregar una pequeña pausa para evitar saturar el servidor de streams
+            # time.sleep(0.1) 
             print(f"✅ ACTIVO: {nombre}")
             activos += 1
         else:
@@ -211,8 +213,21 @@ def monitorear_lista(ruta: str) -> None:
         else:
             f.write("✅ Todos los canales están activos\n")
 
-    # Enviar mensaje WhatsApp
-    mensaje = f"📺 Reporte IPTV\n✔ Activos: {activos}\n❌ Caídos: {len(caidos)}"
+    # ENVÍO DE WHATSAPP MEJORADO (Ajuste solicitado)
+    if caidos:
+        # Construye la lista detallada de canales caídos (solo nombres)
+        detalle_caidos = "\n" + "\n".join([f"❌ {n}" for n, u in caidos])
+        mensaje = (
+            f"🛑 Reporte IPTV (FALLOS)\n"
+            f"✔ Activos: {activos}\n"
+            f"❌ Caídos: {len(caidos)}\n\n"
+            f"-- DETALLE --{detalle_caidos}"
+        )
+    else:
+        # Mensaje simple si todos están activos
+        mensaje = f"✅ Reporte IPTV\n✔ Activos: {activos}\n❌ Caídos: {len(caidos)}"
+
+
     enviar_whatsapp(mensaje, destinatarios)
 
     print("📁 Archivo generado: output.txt")
